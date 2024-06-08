@@ -1,0 +1,441 @@
+
+# Load Packages
+
+```{r}
+package.list <- c("ggplot2", "tidyverse", "ggforce", "ggpubr")
+# install.packages(package.list)
+lapply(package.list, require, character.only=TRUE)
+
+load("~/rink.and.blues.note.environment.rmd")
+```
+
+
+# Functions
+
+```{r}
+subset <- function(object, pheno, col.name=NULL, remove=FALSE){
+  if(class(object)=="data.frame"){
+    object.og <- object
+    if(is.null(col.name)){
+      if(remove==FALSE){
+        if(length(pheno)>1){
+          for(a in 1:length(pheno)){
+            for(b in 1:ncol(object)){
+              if(pheno %in% object[, b]){
+                merge.object <- object.og[c(which(object.og[, b]==c(pheno[a]))), ]
+              }
+            }
+            if(a==1){
+              object <- merge.object
+            }else{
+              object <- rbind(object, merge.object)
+            }
+          }
+        }else{
+          for(a in 1:ncol(object)){
+            if(pheno %in% object[, a]){
+              object <- object[c(which(object[, a]==c(pheno))), ]
+            }
+          }
+        }
+      }else if(remove==TRUE){
+        for(a in 1:ncol(object)){
+          if(pheno %in% object[, a]){
+            object <- object[c(which(object[, a]!=c(pheno))), ]
+          }
+        }
+      }
+    }else{
+      if(remove==FALSE){
+        if(length(pheno)>1){
+          for(a in 1:length(pheno)){
+            merge.object <- object.og[c(which(object.og[, col.name]==c(pheno[a]))), ]
+            if(a==1){
+              object <- merge.object
+            }else{
+              object <- rbind(object, merge.object)
+            }
+          }
+        }else{
+          object <- object[c(which(object[, col.name]==c(pheno))), ]
+        }
+      }else if(remove==TRUE){
+        if(length(pheno)>1){
+          for(a in 1:length(pheno)){
+            object <- object[c(which(object[, col.name]!=c(pheno[a]))), ]
+          }
+        }else{
+          object <- object[c(which(object[, col.name]!=c(pheno))), ]
+        }
+      }
+    }
+  }else if(class(object)=="list"||class(object)=="character"){
+    object.og <- object
+    if(remove==FALSE){
+      if(length(pheno)>1){
+        for(a in 1:length(pheno)){
+          merge.object <- object.og[c(which(object.og==c(pheno[a])))]
+          if(a==1){
+            object <- merge.object
+          }else{
+            object <- rbind(object, merge.object)
+          }
+        }
+      }else{
+        object <- object[c(which(object==c(pheno)))]
+      }
+    }else if(remove==TRUE){
+      if(length(pheno)>1){
+        for(a in 1:length(pheno)){
+          object <- object[c(which(object!=c(pheno[a])))]
+        }
+      }else{
+        object <- object[c(which(object!=c(pheno)))]
+      }
+    }
+  }
+  
+  return(object)
+}
+
+
+generate.linear.equation <- function(x=NA, y=NA, slope=NA, equation=NA){
+  if(all(is.na(x), !is.na(y), class(equation)=="list")){
+    x <- ((y)-(equation$b))/(equation$slope)
+    return(list(x, y))
+  }else if(all(is.na(y), !is.na(x), class(equation)=="list")){
+    y <- (x*equation$slope)+(equation$b)
+    return(list(x, y))
+  }else if(all(class(equation)=="logical", !is.na(x), !is.na(y), !is.na(slope))){
+    b <- (y)-(x*slope)
+    equation <- list(slope, b)
+    names(equation) <- c("slope", "b")
+    return(equation)
+  }else{
+    return(list(x, y))
+  }
+}
+
+
+slope <- function(point.1, point.2){
+  return((point.1[2]-point.2[2])/(point.1[1]-point.2[1]))
+}
+
+
+ep <- function(object){
+  return(eval(parse(text = object)))
+}
+
+
+generate.curve.function.x <- function(x1, y1, x2, y2, a) {
+  b <- ((a*((x2^2)-(x1^2)))+y1-y2)/(x1-x2)
+  c <- (y1)-(((x1)^2)*(a))-((x1)*(((a*((x2^2)-(x1^2)))+y1-y2)/(x1-x2)))
+  
+  equation <- paste0("function(x) {((", a, "*(x^2))+(x*(", b, "))+(", c, "))}")
+  return(equation)
+}
+
+
+generate.curve.function.y <- function(x1, y1, x2, y2, a) {
+  b <- ((a*((x2^2)-(x1^2)))+y1-y2)/(x1-x2)
+  c <- (y1)-(((x1)^2)*(a))-((x1)*(((a*((x2^2)-(x1^2)))+y1-y2)/(x1-x2)))
+  
+  pos.function <- paste0("function(y) {(-", b, "+sqrt((", b, "^2) + ((4*", a, ")*(-", c, "+y))))/(2*", a, ")}")
+  neg.function <- paste0("function(y) {-(", b, "+ sqrt((", b, "^2) - (4*", a, "*", c, ") + (4*", a, "*y)))/(2*", a, ")}")
+  return(list(pos.function, neg.function))
+}
+
+
+uuln <- function(string){
+  return(unique(unname(unlist(string))))
+}
+
+
+remove.na <- function(object, column=NA){
+  if(class(object)=="data.frame"){
+    if(!is.na(column)){
+      if(length(which(is.na(object[, column])==FALSE))!=nrow(object)){
+        object <- object[-c(which(is.na(object[, column])==TRUE)), ]
+      }
+    }else{
+      for(a in 1:length(ncol(object))){
+          if(length(which(is.na(object[, a])==FALSE))!=nrow(object)){
+          object <- object[-c(which(is.na(object[, a])==TRUE)), ]
+        }
+      }
+    }
+  }else if(class(object)=="list" || class(object)=="character" || class(object)=="integer"){
+    if(length(which(is.na(object)==FALSE))!=length(object)){
+      object <- object[-c(which(is.na(object)==TRUE))]
+    }
+  }
+  return(object)
+}
+```
+
+
+# Rink
+```{r}
+rink.frame <- rink.frame.og 
+
+rink.y <- 90
+rink.x <- (200/85)*90
+rink.scale <- 10
+
+rink.frame[,"size"] <- (rink.frame[,"size"] * 25.4)/rink.scale
+
+rink.frame[which(rink.frame[,"geom"]=="segment"), "size"] <- (rink.frame[which(rink.frame[,"geom"]=="segment"), "size"]/0.75)*1
+
+rink.frame[which(rink.frame[,"geom"]=="curve"), "size"] <- (rink.frame[which(rink.frame[,"geom"]=="curve"), "size"]/0.75)*1
+
+endzone.faceoff.segments <- subset(subset(rink.frame, "endzone.faceoff", "element"), "segment", "geom")
+
+faceoff.circle <- subset(subset(rink.frame, "endzone.faceoff", "element"), "circle", "geom")
+faceoff.top.line.x <- 2.875
+# use half the distance between top two lines as one side and radius of face off circle for the other two sides
+theta <- acos(((faceoff.circle[1,"r"]^2)+(faceoff.circle[1,"r"]^2)-(2.875^2))/(2*(faceoff.circle[1,"r"]^2)))
+faceoff.top.line.y <- faceoff.circle[1,"r"]*cos(theta)
+
+endzone.faceoff.segments[which(endzone.faceoff.segments[,"x"]==0), c("x", "xend", "y", "yend")] <- c(2.875, 2.875, faceoff.top.line.y, (faceoff.top.line.y+2))
+
+dir <- c("x", "y")
+for(a in 1:length(dir)){
+  endzone.faceoff.segments.inverse.dir <- endzone.faceoff.segments
+  endzone.faceoff.segments.inverse.dir[, c(dir[a], paste0(dir[a], "end"))] <- endzone.faceoff.segments.inverse.dir[, c(dir[a], paste0(dir[a], "end"))]*-1
+  endzone.faceoff.segments <- rbind(endzone.faceoff.segments, endzone.faceoff.segments.inverse.dir)
+}
+dir <- c("x", "y")
+for(a in 1:length(dir)){
+  endzone.faceoff.segments[, c(dir[a], paste0(dir[a], "end"))] <- endzone.faceoff.segments[, c(dir[a], paste0(dir[a], "end"))] + faceoff.circle[1, dir[a]]
+}
+
+rink.frame <- rbind(subset(rink.frame, "endzone.faceoff", "element", remove=TRUE), faceoff.circle, endzone.faceoff.segments)
+
+# Mirror the elements over the respective axis
+dir <- c("x", "y")
+for(a in 1:length(dir)){
+  rink.frame.inverse.dir <- rink.frame[rink.frame[, paste0("inverse.", dir[a])],]
+  rink.frame.inverse.dir[, c(dir[a], paste0(dir[a], "end"), "curvature")] <- rink.frame.inverse.dir[, c(dir[a], paste0(dir[a], "end"), "curvature")]*(-1)
+  rink.frame <- rbind(rink.frame, rink.frame.inverse.dir)
+}
+
+
+# Generate blank plot bound by the rink dimensions (acknowledge the size, color, and fill arguments)
+rink.test <- ggplot() +
+  theme_void() +
+  scale_size_identity() +
+  scale_color_identity() +
+  scale_fill_identity() +
+  scale_x_continuous(limits=c(-(rink.x/2), (rink.x/2)), breaks=seq(-100, 100, by=25), expand=expansion(mult=c(0.01, 0.01))) +
+  scale_y_continuous(limits=c(-(rink.y/2), (rink.y/2)), breaks=seq(-42.5, 42.5, by=25), expand=expansion(mult=c(0.01, 0.01)))
+
+layers <- uuln(rink.frame[,"layer"]) %>%
+  .[order(.)]
+for(b in 1:length(layers)){
+  rink.frame.layer <- subset(rink.frame, layers[b], "layer")
+  # Add curves to the plot
+  rink.frame.layer.curve <- subset(rink.frame.layer, "curve", "geom")
+  for(a in 1:nrow(rink.frame.layer.curve)){
+    rink.test <- rink.test +
+      geom_curve(data=rink.frame.layer.curve[a,], inherit.aes=FALSE, curvature=rink.frame.layer.curve[a, "curvature"],
+                 aes(x=x, xend=xend, y=y, yend=yend, size=size, color=color))
+  }
+  
+  # Add circles to the plot
+  rink.test <- rink.test +
+    geom_circle(data=subset(rink.frame.layer, "circle", "geom"), inherit.aes=FALSE, 
+                 aes(x0=x, y0=y, r=r, size=size, color=color, fill=fill))
+  
+  # Add segments to the plot 
+  rink.test <- rink.test +
+    geom_segment(data=subset(rink.frame.layer, "segment", "geom"), inherit.aes=FALSE, 
+                 aes(x=x, xend=xend, y=y, yend=yend, size=size, color=color)) 
+}
+
+
+# Visualize :)
+print(rink.test)
+
+print(rink.test)
+FileName <- "~/Rink.png"
+width <- (rink.x/rink.scale)
+height <- (rink.y/rink.scale)
+ggsave(FileName, rink.test, width=width, height=height)
+```
+
+# Blues logo
+```{r}
+# Everything is degreased by /100
+# y is inversed by using 2500-
+
+size <- 1
+
+blues.logo.frame <- blues.logo.frame.og
+
+direction <- c("x", "y")
+for(b in 1:length(direction)){
+  calculate <- which(is.na(blues.logo.frame[, direction[b]]))
+  for(a in 1:length(calculate)){
+    blues.logo.frame[calculate[a], direction[b]] <- blues.logo.frame[calculate[a]-1, direction[b]] + blues.logo.frame[calculate[a]-1, paste0(direction[b], ".distance")]
+  }
+}
+
+curve.rows <- which(blues.logo.frame[,"geom"]=="curve")
+x1 <- blues.logo.frame[curve.rows[2], "x"]
+y1 <- blues.logo.frame[curve.rows[2], "y"]
+x2 <- blues.logo.frame[curve.rows[7], "x"]
+y2 <- blues.logo.frame[curve.rows[7], "y"]
+curve.equation <- generate.curve.function.x(x1, y1, x2, y2, 0.07)
+curve.equation.y <- generate.curve.function.y(x1, y1, x2, y2, 0.07)[[1]]
+curve <- eval(parse(text=curve.equation.y))
+for(a in 2:7){
+  blues.logo.frame[curve.rows[a], "x"] <- curve(blues.logo.frame[curve.rows[a], "y"])
+}
+
+# Calculate slope
+point.1 <- which(blues.logo.frame[,"point"]==1)
+point.2 <- which(blues.logo.frame[,"point"]==2)
+general.slope <- slope(c(blues.logo.frame[point.1, "x"], blues.logo.frame[point.1, "y"]), c(blues.logo.frame[point.2, "x"], blues.logo.frame[point.2, "y"]))
+
+
+
+equations <- uuln(blues.logo.frame[, "equation"])
+linear.equation.names <- remove.na(equations[str_detect(equations, "linear")])
+linear.equations <- rep(list(NA), length(linear.equation.names))
+names(linear.equations) <- linear.equation.names
+for(a in 1:
+    length(linear.equations)){
+  point.row <- which(blues.logo.frame[, "point"]==as.numeric(str_remove(linear.equation.names[a], "linear ")))
+  linear.equations[[a]] <- generate.linear.equation(x=blues.logo.frame[point.row, "x"], y=blues.logo.frame[point.row, "y"], slope=general.slope)
+}
+
+linear.rows <- which(str_detect(blues.logo.frame[, "equation"], "linear ")==TRUE)
+for(a in 1:length(linear.rows)){
+  equation <- linear.equations[[blues.logo.frame[linear.rows[a], "equation"]]]
+  x.y <- generate.linear.equation(blues.logo.frame[linear.rows[a], "x"], blues.logo.frame[linear.rows[a], "y"], general.slope, equation)
+  blues.logo.frame[linear.rows[a], "x"] <- x.y[[1]]
+  blues.logo.frame[linear.rows[a], "y"] <- x.y[[2]]
+}
+
+
+generate.linear.equation(blues.logo.frame[linear.rows[a], "x"], blues.logo.frame[linear.rows[a], "y"], general.slope)
+
+for(a in 1:nrow(blues.logo.frame)){
+  if(a!=nrow(blues.logo.frame)){
+    blues.logo.frame[a, "x.end"] <- blues.logo.frame[(a+1),"x"]
+    blues.logo.frame[a, "y.end"] <- blues.logo.frame[(a+1),"y"]
+  }else{
+    blues.logo.frame[a, "x.end"] <- blues.logo.frame[1,"x"]
+    blues.logo.frame[a, "y.end"] <- blues.logo.frame[1,"y"]
+  }
+}
+
+curve.rows <- which(blues.logo.frame[, "geom"]=="curve")[c(2:4)]
+for(a in 1:length(curve.rows)){
+  blues.logo.frame[curve.rows[a], "x.end"] <- blues.logo.frame[curve.rows[a]+1, "x.end"]-1.75
+}
+
+logo.test <- ggplot() +
+  theme_void() +
+  scale_size_identity() +
+  scale_color_identity() +
+  scale_fill_identity() +
+  scale_x_continuous(limits=c(-11, 11)) +
+  scale_y_continuous(limits=c(-11, 11)) +
+  geom_segment(data=subset(blues.logo.frame, "segment", "geom"), aes(x=x, xend=x.end, y=y, yend=y.end), size=size, lineend="round")
+
+blues.logo.frame.curve <- subset(blues.logo.frame, "curve", "geom")
+
+for(a in 1:nrow(blues.logo.frame.curve)){
+  logo.test <- logo.test +
+    geom_curve(data=blues.logo.frame.curve[a,], inherit.aes=FALSE, curvature=-blues.logo.frame.curve[a, "r"], 
+               angle=blues.logo.frame.curve[a, "angle"], lineend="round", 
+               aes(x=x, xend=x.end, y=y, yend=y.end, size=size))
+}
+print(logo.test)
+
+logo.test <- logo.test + theme(plot.background=element_rect(color="white", fill="white")) +
+  bgcolor("white") + border(color="white")
+
+FileName <- "~/blues.logo.png"
+width <- (5)
+height <- (5)
+ggsave(FileName, logo.test, width=width, height=height, scale=0.75)
+```
+
+
+# Logo and rink
+```{r}
+rink.y <- 90
+rink.x <- (200/85)*90
+rink.scale <- 10
+
+direction <- c("x", "y")
+for(a in 1:length(direction)){
+  max <- max(blues.logo.frame[, direction[a]])
+  min <- min(blues.logo.frame[,direction[a]])
+  shift <- (min + ((max-min)/2))
+  if(direction[a]=="y"){
+    shift <- shift+2
+  }
+  blues.logo.frame[, direction[a]] <- blues.logo.frame[, direction[a]] - shift
+  blues.logo.frame[, paste0(direction[a], ".end")] <- blues.logo.frame[, paste0(direction[a], ".end")] - shift
+}
+
+
+# Generate blank plot bound by the rink dimensions (acknowledge the size, color, and fill arguments)
+rink.logo.test <- ggplot() +
+  theme_void() +
+  scale_size_identity() +
+  scale_color_identity() +
+  scale_fill_identity() +
+  scale_x_continuous(limits=c(-(rink.x/2), (rink.x/2)), breaks=seq(-100, 100, by=25), expand=expansion(mult=c(0.01, 0.01))) +
+  scale_y_continuous(limits=c(-(rink.y/2), (rink.y/2)), breaks=seq(-42.5, 42.5, by=25), expand=expansion(mult=c(0.01, 0.01)))
+
+# Add logo segments to the plot 
+rink.logo.test <- rink.logo.test +
+  geom_segment(data=subset(blues.logo.frame, "segment", "geom"), aes(x=x, xend=x.end, y=y, yend=y.end), size=size, lineend="round")
+
+blues.logo.frame.curve <- subset(blues.logo.frame, "curve", "geom")
+# Add logo curves to the plot 
+for(a in 1:nrow(blues.logo.frame.curve)){
+  rink.logo.test <- rink.logo.test +
+    geom_curve(data=blues.logo.frame.curve[a,], inherit.aes=FALSE, curvature=-blues.logo.frame.curve[a, "r"], 
+               angle=blues.logo.frame.curve[a, "angle"], lineend="round", 
+               aes(x=x, xend=x.end, y=y, yend=y.end, size=size))
+}
+
+layers <- uuln(rink.frame[,"layer"]) %>%
+  .[order(.)]
+for(b in 1:length(layers)){
+  rink.frame.layer <- subset(rink.frame, layers[b], "layer")
+  # Add curves to the plot
+  rink.frame.layer.curve <- subset(rink.frame.layer, "curve", "geom")
+  for(a in 1:nrow(rink.frame.layer.curve)){
+    rink.logo.test <- rink.logo.test +
+      geom_curve(data=rink.frame.layer.curve[a,], inherit.aes=FALSE, curvature=rink.frame.layer.curve[a, "curvature"],
+                 aes(x=x, xend=xend, y=y, yend=yend, size=size, color=color))
+  }
+  
+  # Add circles to the plot
+  rink.logo.test <- rink.logo.test +
+    geom_circle(data=subset(rink.frame.layer, "circle", "geom"), inherit.aes=FALSE, 
+                 aes(x0=x, y0=y, r=r, size=size, color=color, fill=fill))
+  
+  # Add segments to the plot 
+  rink.logo.test <- rink.logo.test +
+    geom_segment(data=subset(rink.frame.layer, "segment", "geom"), inherit.aes=FALSE, 
+                 aes(x=x, xend=xend, y=y, yend=yend, size=size, color=color)) 
+}
+
+rink.logo.test <- rink.logo.test + theme(plot.background=element_rect(color="white", fill="white")) +
+  bgcolor("white") + border(color="white")
+
+print(rink.logo.test)
+FileName <- "~/Rink.logo.png"
+width <- (rink.x/rink.scale)
+height <- (rink.y/rink.scale)
+ggsave(FileName, rink.logo.test, width=width, height=height)
+
+
+```
